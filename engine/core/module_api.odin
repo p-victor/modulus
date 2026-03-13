@@ -1,6 +1,6 @@
 package core
 
-Log_Proc :: #type proc(msg: cstring)
+Log_Proc :: #type proc(msg: string)
 
 Engine_Context :: struct {
 	frame_index: u64,

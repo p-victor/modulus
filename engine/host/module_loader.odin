@@ -4,7 +4,7 @@ import core "mod:engine/core"
 import platform "mod:engine/platform"
 
 Loaded_Module :: struct {
-	original_path: cstring,
+	original_path: string,
 	lib:           platform.Library,
 	api:           ^core.Module_API,
 }
@@ -18,25 +18,24 @@ unload_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) {
 	platform.unload_library(&m.lib)
 }
 
-reload_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
-	unload_module(m, ctx)
-
+load_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
 	lib, ok := platform.load_library(m.original_path)
 	if !ok {
 		ctx.log("load_library failed")
+		ctx.log(platform.last_error())
 		return false
 	}
 
-	symbol := platform.load_symbol(lib, "modulus_get_module_api")
-	if symbol == nil {
+	symbol, found := platform.load_symbol(lib, "modulus_get_module_api")
+	if !found {
 		platform.unload_library(&lib)
 		ctx.log("load_symbol failed")
+		ctx.log(platform.last_error())
 		return false
 	}
 
 	get_api := cast(core.Get_Module_API_Proc)symbol
 	api := get_api()
-
 	if api == nil {
 		platform.unload_library(&lib)
 		ctx.log("module API was nil")
@@ -53,4 +52,9 @@ reload_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
 	}
 
 	return true
+}
+
+reload_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
+	unload_module(m, ctx)
+	return load_module(m, ctx)
 }
