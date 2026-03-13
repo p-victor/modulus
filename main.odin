@@ -25,12 +25,9 @@ main :: proc() {
 		return
 	}
 
-	mods := host.discover_modules(module_dir)
-    host.load_modules(mods, &ctx)
-
-    for {
-        host.update_modules(mods, &ctx, dt)
-    }
+	mod := host.Loaded_Module{
+		original_path = module_path,
+	}
 
 	ctx.log("starting modulus")
 
