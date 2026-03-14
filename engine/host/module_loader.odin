@@ -21,16 +21,16 @@ unload_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) {
 load_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
 	lib, ok := platform.load_library(m.original_path)
 	if !ok {
-		ctx.log("load_library failed")
-		ctx.log(platform.last_error())
+		core.engine_error(ctx, "engine", "load_library failed")
+		core.engine_error(ctx, "engine", platform.last_error())
 		return false
 	}
 
 	symbol, found := platform.load_symbol(lib, "modulus_get_module_api")
 	if !found {
 		platform.unload_library(&lib)
-		ctx.log("load_symbol failed")
-		ctx.log(platform.last_error())
+		core.engine_error(ctx, "engine", "load_symbol failed")
+		core.engine_error(ctx, "engine", platform.last_error())
 		return false
 	}
 
@@ -38,7 +38,7 @@ load_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
 	api := get_api()
 	if api == nil {
 		platform.unload_library(&lib)
-		ctx.log("module API was nil")
+		core.engine_error(ctx, "engine", "module API was nil")
 		return false
 	}
 
@@ -47,7 +47,7 @@ load_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
 
 	if !m.api.init(ctx) {
 		unload_module(m, ctx)
-		ctx.log("module init failed")
+		core.engine_error(ctx, "engine", "module init failed")
 		return false
 	}
 

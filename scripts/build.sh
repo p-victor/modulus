@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 TARGET="${1:-native}"
+MODE="${2:-debug}"
 
 HOST_OS="$(uname -s)"
 HOST_ARCH="$(uname -m)"
@@ -50,23 +51,34 @@ case "$TARGET" in
         ;;
 esac
 
+case "$MODE" in
+    release)
+        ODIN_FLAGS="-o:aggressive -no-bounds-check -define:MODULUS_DEBUG=false"
+        ;;
+    debug|*)
+        ODIN_FLAGS="-debug -define:MODULUS_DEBUG=true"
+        ;;
+esac
+
 mkdir -p "build/$TARGET/bin"
 mkdir -p "build/$TARGET/modules"
 mkdir -p "build/$TARGET/temp"
 mkdir -p "build/$TARGET/logs"
 
-echo "==> Building module for $TARGET"
+echo "==> Building module for $TARGET ($MODE)"
 odin build modules/test_module \
     -build-mode:dll \
     -collection:mod=. \
     -target:$ODIN_TARGET \
-    -out:"$MODULE_PATH"
+    -out:"$MODULE_PATH" \
+    $ODIN_FLAGS
 
-echo "==> Building engine for $TARGET"
+echo "==> Building engine for $TARGET ($MODE)"
 odin build . \
     -collection:mod=. \
     -target:$ODIN_TARGET \
-    -out:"$EXE_PATH"
+    -out:"$EXE_PATH" \
+    $ODIN_FLAGS
 
 echo "==> Build complete"
 echo "    exe:    $EXE_PATH"

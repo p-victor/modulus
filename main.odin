@@ -8,18 +8,19 @@ import host "mod:engine/host"
 
 running: bool = true
 
+// Package-level logger so the log proc (which can't close over locals) can reference it.
+engine_logger: core.Logger
+
 sigint_handler :: proc "c" (sig: posix.Signal) {
 	running = false
 }
 
-default_log :: proc(msg: string) {
-	fmt.printf("[modulus] %s\n", msg)
-}
-
-main :: proc() {
+run :: proc() {
 	ctx := core.Engine_Context{
 		frame_index = 0,
-		log         = default_log,
+		log         = proc(level: core.Log_Level, tag: string, msg: string) {
+			core.logger_log(&engine_logger, level, tag, msg)
+		},
 	}
 
 	module_path: string
@@ -28,18 +29,16 @@ main :: proc() {
 	} else when ODIN_OS == .Windows {
 		module_path = "./build/windows_amd64/modules/test_module.dll"
 	} else {
-		default_log("unsupported platform")
+		fmt.println("unsupported platform")
 		return
 	}
 
-	mod := host.Loaded_Module{
-		original_path = module_path,
-	}
+	mod := host.Loaded_Module{original_path = module_path}
 
-	ctx.log("starting modulus")
+	core.engine_log(&ctx, .Info, "engine", "starting modulus")
 
 	if !host.load_module(&mod, &ctx) {
-		ctx.log("initial module load failed")
+		core.engine_error(&ctx, "engine", "initial module load failed")
 		return
 	}
 
@@ -47,16 +46,34 @@ main :: proc() {
 
 	action := posix.sigaction_t{}
 	action.sa_handler = sigint_handler
-
 	posix.sigaction(posix.Signal.SIGINT, &action, nil)
+
+	FRAME_DURATION :: time.Second / 60
+
+	tick := time.tick_now()
 
 	for running {
 		ctx.frame_index += 1
 
+		now := time.tick_now()
+		dt := time.duration_seconds(time.tick_diff(tick, now))
+		tick = now
+
 		if mod.api != nil {
-			mod.api.update(&ctx, 1.0 / 60.0)
+			mod.api.update(&ctx, dt)
 		}
 
-		time.sleep(time.Second)
+		elapsed := time.tick_diff(tick, time.tick_now())
+		remaining := FRAME_DURATION - elapsed
+		if remaining > 0 {
+			time.sleep(remaining)
+		}
 	}
+
+	core.engine_log(&ctx, .Info, "engine", "shutting down")
+}
+
+main :: proc() {
+	engine_logger = core.make_logger()
+	run()
 }
