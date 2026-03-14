@@ -1,9 +1,6 @@
 package core
 
-import "core:fmt"
-
-// Defaults to true. Pass -define:MODULUS_DEBUG=false to strip all logging in release.
-MODULUS_DEBUG :: #config(MODULUS_DEBUG, true)
+import "core:log"
 
 Log_Level :: enum {
 	Debug,
@@ -26,39 +23,41 @@ engine_error :: #force_inline proc(ctx: ^Engine_Context, tag: string, msg: strin
 	ctx.log(.Error, tag, msg)
 }
 
+// Logger wraps core:log. Holds a min_level filter and the backend log.Logger.
+// The backend handles formatting, color, and output — we map our levels to core:log levels.
 Logger :: struct {
 	min_level: Log_Level,
-	color:     bool,
+	impl:      log.Logger,
 }
 
-make_logger :: proc(min_level := Log_Level.Debug, color := true) -> Logger {
-	return Logger{min_level = min_level, color = color}
+make_logger :: proc(min_level := Log_Level.Debug) -> Logger {
+	// Level and terminal color only — no source location since our call site
+	// is always logger_log, which is not useful location info.
+	impl := log.create_console_logger(_to_core_level(min_level), {.Level, .Terminal_Color})
+	return Logger{min_level = min_level, impl = impl}
 }
-
-@(private)
-_level_str := [Log_Level]string{
-	.Debug = "DEBUG",
-	.Info  = "INFO ",
-	.Warn  = "WARN ",
-	.Error = "ERROR",
-}
-
-@(private)
-_level_color := [Log_Level]string{
-	.Debug = "\x1b[36m",
-	.Info  = "\x1b[37m",
-	.Warn  = "\x1b[33m",
-	.Error = "\x1b[31m",
-}
-
-RESET :: "\x1b[0m"
 
 logger_log :: proc(l: ^Logger, level: Log_Level, tag: string, msg: string) {
 	if level < l.min_level do return
 
-	if l.color {
-		fmt.printf("%s[%s]%s [%s] %s\n", _level_color[level], _level_str[level], RESET, tag, msg)
-	} else {
-		fmt.printf("[%s] [%s] %s\n", _level_str[level], tag, msg)
+	switch level {
+	case .Debug: log.debugf("[%s] %s", tag, msg)
+	case .Info:  log.infof("[%s] %s", tag, msg)
+	case .Warn:  log.warnf("[%s] %s", tag, msg)
+	case .Error: log.errorf("[%s] %s", tag, msg)
 	}
+}
+
+// _to_core_level maps our ABI-stable Log_Level to Odin's core:log.Level.
+// These look identical now but must remain separate: Log_Level is part of the module ABI
+// and will diverge (Trace, Critical, etc.). Modules must not depend on core:log directly.
+@(private)
+_to_core_level :: proc(level: Log_Level) -> log.Level {
+	switch level {
+	case .Debug: return .Debug
+	case .Info:  return .Info
+	case .Warn:  return .Warning
+	case .Error: return .Error
+	}
+	return .Debug
 }

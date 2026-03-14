@@ -10,6 +10,13 @@ MODE="${2:-debug}"
 HOST_OS="$(uname -s)"
 HOST_ARCH="$(uname -m)"
 
+# Load flag defaults from build.conf, then allow env var overrides.
+if [[ -f "build.conf" ]]; then
+    source "build.conf"
+fi
+MODULUS_DEBUG="${MODULUS_DEBUG:-true}"
+MODULUS_HOT_RELOAD="${MODULUS_HOT_RELOAD:-true}"
+
 normalize_target() {
     case "$1" in
         native)
@@ -53,12 +60,19 @@ esac
 
 case "$MODE" in
     release)
-        ODIN_FLAGS="-o:aggressive -no-bounds-check -define:MODULUS_DEBUG=false"
+        # Release forces all feature flags off regardless of build.conf.
+        MODULUS_DEBUG=false
+        MODULUS_HOT_RELOAD=false
+        ODIN_OPT="-o:aggressive -no-bounds-check"
         ;;
     debug|*)
-        ODIN_FLAGS="-debug -define:MODULUS_DEBUG=true"
+        ODIN_OPT="-debug"
         ;;
 esac
+
+ODIN_FLAGS="$ODIN_OPT \
+    -define:MODULUS_DEBUG=${MODULUS_DEBUG} \
+    -define:MODULUS_HOT_RELOAD=${MODULUS_HOT_RELOAD}"
 
 mkdir -p "build/$TARGET/bin"
 mkdir -p "build/$TARGET/modules"
