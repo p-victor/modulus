@@ -1,6 +1,6 @@
 MODULE ?= test_module
 
-.PHONY: build build-linux build-windows build-module watch release release-linux release-windows rebuild run run-release clean clean-linux clean-windows nuke
+.PHONY: build build-linux build-windows build-module watch release release-linux release-windows safe safe-linux safe-windows rebuild run run-release run-safe clean clean-linux clean-windows nuke
 
 build:
 	bash scripts/build.sh native debug
@@ -26,12 +26,24 @@ release-linux:
 release-windows:
 	bash scripts/build.sh windows release
 
+safe:
+	bash scripts/build.sh native safe
+
+safe-linux:
+	bash scripts/build.sh linux safe
+
+safe-windows:
+	bash scripts/build.sh windows safe
+
 rebuild: clean build
 
 run:
 	bash scripts/run.sh $(MODULE)
 
 run-release: release
+	bash scripts/run.sh $(MODULE)
+
+run-safe: safe
 	bash scripts/run.sh $(MODULE)
 
 clean:

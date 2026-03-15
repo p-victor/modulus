@@ -36,14 +36,15 @@ _make_ctx :: proc() -> core.Engine_Context {
 	}
 }
 
-// _resolve_module_path returns the module path from the CLI arg.
+// _resolve_module_paths returns all module paths from CLI args (os.args[1:]).
+// Slot 0 is the primary module (run is called on it); subsequent slots are companions.
 @(private)
-_resolve_module_path :: proc() -> (path: string, ok: bool) {
+_resolve_module_paths :: proc() -> (paths: []string, ok: bool) {
 	if len(os.args) > 1 {
-		return os.args[1], true
+		return os.args[1:], true
 	}
-	fmt.eprintln("usage: modulus <module_path>")
-	return "", false
+	fmt.eprintln("usage: modulus <module_path> [module_path ...]")
+	return nil, false
 }
 
 // _setup_signals registers a default SIGINT handler that sets quit = true.
@@ -55,8 +56,8 @@ _setup_signals :: proc() {
 	posix.sigaction(posix.Signal.SIGINT, &action, nil)
 }
 
-// _run_cold is the release path — loads the module, calls run, unloads.
-// No frame loop, no watcher, no reload. The module owns all of that.
+// _run_cold is the release/safe path — loads all modules, calls run on slot 0, unloads all.
+// No watcher, no reload. Slot 0 is the primary; companions are init/shutdown only.
 @(private)
 _run_cold :: proc() {
 	_logger = core.make_logger()
@@ -64,27 +65,41 @@ _run_cold :: proc() {
 
 	ctx := _make_ctx()
 
-	module_path, ok := _resolve_module_path()
+	module_paths, ok := _resolve_module_paths()
 	if !ok do return
 
-	mod := Loaded_Module{original_path = module_path}
+	module_count := min(len(module_paths), MAX_MODULES)
+
+	slots: [MAX_MODULES]Loaded_Module
+	for i in 0..<module_count {
+		slots[i].original_path = module_paths[i]
+	}
 
 	core.engine_log(&ctx, .Info, "engine", "starting modulus")
 
-	if !load_module(&mod, &ctx) {
-		core.engine_error(&ctx, "engine", "initial module load failed")
-		return
+	loaded_count := 0
+	for i in 0..<module_count {
+		if !load_module(&slots[i], &ctx) {
+			core.engine_error(&ctx, "engine", fmt.tprintf("failed to load: %s", module_paths[i]))
+			for j := loaded_count - 1; j >= 0; j -= 1 {
+				unload_module(&slots[j], &ctx)
+			}
+			return
+		}
+		loaded_count += 1
 	}
 
-	defer unload_module(&mod, &ctx)
-
-	context.allocator = mem.arena_allocator(&mod.arena)
+	context.allocator = mem.arena_allocator(&slots[0].arena)
 
 	_setup_signals()
 
-	if mod.api.run != nil {
-		mod.api.run(&ctx)
+	if slots[0].api.run != nil {
+		slots[0].api.run(&ctx)
 	}
 
 	core.engine_log(&ctx, .Info, "engine", "shutting down")
+
+	for i := loaded_count - 1; i >= 0; i -= 1 {
+		unload_module(&slots[i], &ctx)
+	}
 }

@@ -31,7 +31,7 @@ module_run :: proc(ctx: ^core.Engine_Context) {
 }
 
 module_api := core.Module_API{
-	name          = "test_module",
+	name = "test_module",
 	version       = 1,
 	memory_budget = 0,
 	run           = module_run,

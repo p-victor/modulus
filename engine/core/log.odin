@@ -1,6 +1,7 @@
 package core
 
 import "core:log"
+import "base:intrinsics"
 
 Log_Level :: enum {
 	Debug,
@@ -21,6 +22,18 @@ engine_log :: #force_inline proc(ctx: ^Engine_Context, level: Log_Level, tag: st
 // Always present in all builds — use for genuine errors that must be visible in release.
 engine_error :: #force_inline proc(ctx: ^Engine_Context, tag: string, msg: string) {
 	ctx.log(.Error, tag, msg)
+}
+
+// Zero-cost in release: force-inlined and body compiled out when both flags are false.
+// Active in debug (MODULUS_DEBUG) and safe (MODULUS_SAFE) builds.
+// Logs the failure via engine_error then traps — debugger catches it, no stack trace noise.
+engine_assert :: #force_inline proc(ctx: ^Engine_Context, cond: bool, tag: string, msg: string) {
+	when MODULUS_DEBUG || MODULUS_SAFE {
+		if !cond {
+			engine_error(ctx, tag, msg)
+			intrinsics.trap()
+		}
+	}
 }
 
 // Logger wraps core:log. Holds a min_level filter and the backend log.Logger.

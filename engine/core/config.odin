@@ -18,3 +18,7 @@ MODULUS_DEBUG :: #config(MODULUS_DEBUG, true)
 // Controls hot-reload: file watcher, module reload on change.
 // Stripped entirely in release — no watcher, no reload overhead.
 MODULUS_HOT_RELOAD :: #config(MODULUS_HOT_RELOAD, true)
+
+// Safe build mode: no logging, no hot-reload, but bounds checks and engine_assert stay on.
+// Use for profiling/QA where you want real perf numbers without silently corrupting memory.
+MODULUS_SAFE :: #config(MODULUS_SAFE, false)

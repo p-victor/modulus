@@ -5,7 +5,10 @@ import "base:runtime"
 import core "mod:engine/core"
 import platform "mod:engine/platform"
 
-// 4 MiB default persistent arena per module slot.
+// TEMP(metaprogram): slot count derived from manifest at compile time.
+MAX_MODULES :: 64
+
+// TEMP(metaprogram): modules declare memory_budget in manifest; validated and wired at compile time.
 @(private) DEFAULT_MODULE_ARENA_SIZE :: 4 * mem.Megabyte
 
 Loaded_Module :: struct {

@@ -20,6 +20,7 @@ if [[ -f "build.conf" ]]; then
 fi
 MODULUS_DEBUG="${MODULUS_DEBUG:-true}"
 MODULUS_HOT_RELOAD="${MODULUS_HOT_RELOAD:-true}"
+MODULUS_SAFE="${MODULUS_SAFE:-false}"
 
 # Env var takes precedence over build.conf.
 [[ -n "$_MODULE_ENV" ]] && MODULE="$_MODULE_ENV"
@@ -71,7 +72,15 @@ case "$MODE" in
         # Release forces all feature flags off regardless of build.conf.
         MODULUS_DEBUG=false
         MODULUS_HOT_RELOAD=false
+        MODULUS_SAFE=false
         ODIN_OPT="-o:aggressive -no-bounds-check"
+        ;;
+    safe)
+        # Safe: no logging, no hot-reload, but bounds checks and engine_assert stay on.
+        MODULUS_DEBUG=false
+        MODULUS_HOT_RELOAD=false
+        MODULUS_SAFE=true
+        ODIN_OPT="-o:speed"
         ;;
     debug|*)
         ODIN_OPT="-debug"
@@ -80,7 +89,8 @@ esac
 
 ODIN_FLAGS="$ODIN_OPT \
     -define:MODULUS_DEBUG=${MODULUS_DEBUG} \
-    -define:MODULUS_HOT_RELOAD=${MODULUS_HOT_RELOAD}"
+    -define:MODULUS_HOT_RELOAD=${MODULUS_HOT_RELOAD} \
+    -define:MODULUS_SAFE=${MODULUS_SAFE}"
 
 mkdir -p "build/$TARGET/bin"
 mkdir -p "build/$TARGET/modules"
