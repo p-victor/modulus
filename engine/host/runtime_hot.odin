@@ -25,7 +25,7 @@ _Watcher_Data :: struct {
 // _watcher_proc runs on a background thread while the primary module's run proc is blocking.
 // Polls all active slot watchers every 100ms. When any .so changes, signals the module to
 // stop and sets _reload_flag so the engine reloads all slots.
-// NOTE: write to _running from this thread is a benign race on x86 (single-byte store).
+// NOTE: write to _should_quit from this thread is a benign race on x86 (single-byte store).
 //       Acceptable for this debug-only path.
 @(private)
 _watcher_proc :: proc(data: rawptr) {
@@ -34,7 +34,7 @@ _watcher_proc :: proc(data: rawptr) {
 		for i in 0..<d.count {
 			if d.watching[i] && platform.poll_changed(&d.watchers[i]) {
 				_reload_flag = true
-				_running = false
+				_should_quit = true
 				return
 			}
 		}
@@ -166,7 +166,7 @@ _run_hot :: proc() {
 
 		// Reload: reset running flag and loop.
 		is_reload = true
-		_running = true
+		_should_quit = false
 		core.engine_log(&ctx, .Info, "engine", "module changed, reloading")
 	}
 

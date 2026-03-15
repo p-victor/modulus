@@ -7,14 +7,16 @@ import "core:os"
 import posix "core:sys/posix"
 import core "mod:engine/core"
 
-@(private) _running: bool = true
+// false = keep running, true = quit. Modules loop `for !ctx.quit^`.
+// SIGINT and the hot-reload watcher both set this to true to stop the module's run proc.
+@(private) _should_quit: bool = false
 
 // Package-level so the Engine_Context log proc (which cannot close over locals) can reference it.
 @(private) _logger: core.Logger
 
 @(private)
 _sigint_handler :: proc "c" (sig: posix.Signal) {
-	_running = false
+	_should_quit = true
 }
 
 // Compile-time dispatch — exactly one of _run_hot / _run_cold exists in any given build.
@@ -33,7 +35,7 @@ _make_ctx :: proc() -> core.Engine_Context {
 		log  = proc(level: core.Log_Level, tag: string, msg: string) {
 			core.logger_log(&_logger, level, tag, msg)
 		},
-		quit = &_running,
+		quit = &_should_quit,
 	}
 }
 

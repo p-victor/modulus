@@ -46,7 +46,9 @@ build-test-modules:
 # Passed in scrambled order to verify topo sort.
 # Valid init orders: d/e before b/c, b/c before a.
 # Valid shutdown orders: reverse of init.
-test-manifest: build build-test-modules
+test-manifest: build build-test-modules run-test-modules
+
+run-test-modules:
 	./build/linux_amd64/bin/modulus \
 		build/linux_amd64/modules/mod_a.so \
 		build/linux_amd64/modules/mod_c.so \
