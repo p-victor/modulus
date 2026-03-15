@@ -14,13 +14,15 @@ A high-performance, ultra-modular engine runtime written in Odin. The runtime is
 
 - [Odin](https://odin-lang.org/) compiler in `PATH`
 - Linux (Windows cross-compilation supported, native Windows in progress)
+- `inotify-tools` for `make watch` (hot-reload source watching): `sudo apt install inotify-tools`
 
 ## Build
 
 ```sh
-make build        # debug build (hot-reload, logging enabled)
-make release      # release build (all dev features stripped, -o:aggressive)
-make rebuild      # clean + debug build
+make build          # debug build (hot-reload, logging enabled)
+make release        # release build (all dev features stripped, -o:aggressive)
+make rebuild        # clean + debug build
+make build-module   # rebuild only the module .so (use while engine is running)
 ```
 
 ## Run
@@ -30,6 +32,16 @@ make run                    # run default module from build.conf
 make run MODULE=my_app      # run a specific module
 make run-release            # release build then run
 ```
+
+## Hot-reload dev workflow
+
+```sh
+make run          # terminal 1 — engine running, watching .so for changes
+make watch        # terminal 2 — watches modules/**/*.odin, rebuilds .so on save
+```
+
+Edit any module source file, save, and the engine reloads it automatically.
+Requires `inotify-tools`. No-op if `MODULUS_HOT_RELOAD=false` in `build.conf`.
 
 ## Project structure
 

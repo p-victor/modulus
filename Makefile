@@ -1,9 +1,15 @@
 MODULE ?= test_module
 
-.PHONY: build build-linux build-windows release release-linux release-windows rebuild run run-release clean clean-linux clean-windows nuke
+.PHONY: build build-linux build-windows build-module watch release release-linux release-windows rebuild run run-release clean clean-linux clean-windows nuke
 
 build:
 	bash scripts/build.sh native debug
+
+build-module:
+	MODULE=$(MODULE) bash scripts/build.sh native debug module
+
+watch:
+	bash scripts/watch.sh
 
 build-linux:
 	bash scripts/build.sh linux debug

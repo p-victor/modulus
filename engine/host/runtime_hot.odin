@@ -1,65 +1,95 @@
 package host
 
+import "core:mem"
+import "core:thread"
+import "core:time"
 import core "mod:engine/core"
 import platform "mod:engine/platform"
-import "core:time"
 
 // _run_hot only exists when MODULUS_HOT_RELOAD=true.
 // It does not appear in release binaries at all.
 when core.MODULUS_HOT_RELOAD {
 
+@(private) _reload_flag:         bool = false
+@(private) _watcher_should_stop: bool = false
+
+// _watcher_proc runs on a background thread while the module's run proc is blocking.
+// Polls the file watcher every 100ms. When the .so changes, signals the module to stop
+// by setting quit = true, then sets _reload_flag so the engine knows to reload rather
+// than exit.
+// NOTE: write to _running from this thread is a benign race on x86 (single-byte store).
+//       Acceptable for this debug-only path.
+@(private)
+_watcher_proc :: proc(data: rawptr) {
+	w := (^platform.File_Watcher)(data)
+	for !_watcher_should_stop {
+		if platform.poll_changed(w) {
+			_reload_flag = true
+			_running = false
+			return
+		}
+		time.sleep(100 * time.Millisecond)
+	}
+}
+
 _run_hot :: proc() {
 	_logger = core.make_logger()
-	context.logger = _logger.impl // set once — logger_log reads context.logger without reassigning it
-
-	ctx := _make_ctx()
+	context.logger = _logger.impl
 
 	module_path, ok := _resolve_module_path()
 	if !ok do return
 
-	mod := Loaded_Module{original_path = module_path}
-
-	core.engine_log(&ctx, .Info, "engine", "starting modulus")
-
-	if !load_module(&mod, &ctx) {
-		core.engine_error(&ctx, "engine", "initial module load failed")
-		return
-	}
-
-	defer unload_module(&mod, &ctx)
+	ctx := _make_ctx()
 
 	watcher, watching := platform.watch_file(module_path)
 	defer platform.destroy_watcher(&watcher)
-	if watching {
-		core.engine_log(&ctx, .Info, "engine", "hot-reload watching module")
-	}
 
 	_setup_signals()
 
-	FRAME_DURATION :: time.Second / 60
-	tick := time.tick_now()
+	core.engine_log(&ctx, .Info, "engine", "starting modulus (hot)")
+	if watching {
+		core.engine_log(&ctx, .Info, "engine", "watching for hot-reload")
+	}
 
-	for _running {
-		ctx.frame_index += 1
+	mod := Loaded_Module{original_path = module_path}
 
-		now := time.tick_now()
-		dt := time.duration_seconds(time.tick_diff(tick, now))
-		tick = now
+	for {
+		_reload_flag = false
 
-		if mod.api != nil {
-			mod.api.update(&ctx, dt)
+		if !load_module(&mod, &ctx) {
+			core.engine_error(&ctx, "engine", "module load failed")
+			break
 		}
 
-		if watching && platform.poll_changed(&watcher) {
-			core.engine_log(&ctx, .Info, "engine", "module changed, reloading")
-			reload_module(&mod, &ctx)
+		context.allocator = mem.arena_allocator(&mod.arena)
+
+		// Background thread watches for .so changes while module's run proc blocks.
+		watcher_thread: ^thread.Thread
+		if watching {
+			_watcher_should_stop = false
+			watcher_thread = thread.create_and_start_with_data(&watcher, _watcher_proc)
 		}
 
-		elapsed := time.tick_diff(tick, time.tick_now())
-		remaining := FRAME_DURATION - elapsed
-		if remaining > 0 {
-			time.sleep(remaining)
+		if mod.api.run != nil {
+			mod.api.run(&ctx)
 		}
+
+		// Signal watcher thread to stop and wait for it before unloading.
+		if watcher_thread != nil {
+			_watcher_should_stop = true
+			thread.join(watcher_thread)
+			thread.destroy(watcher_thread)
+		}
+
+		unload_module(&mod, &ctx)
+
+		if !_reload_flag {
+			break // quit signal (SIGINT), not a reload
+		}
+
+		// Reload: reset running flag and loop.
+		_running = true
+		core.engine_log(&ctx, .Info, "engine", "module changed, reloading")
 	}
 
 	core.engine_log(&ctx, .Info, "engine", "shutting down")

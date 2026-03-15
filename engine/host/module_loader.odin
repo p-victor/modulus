@@ -1,21 +1,34 @@
 package host
 
+import "core:mem"
+import "base:runtime"
 import core "mod:engine/core"
 import platform "mod:engine/platform"
+
+// 4 MiB default persistent arena per module slot.
+@(private) DEFAULT_MODULE_ARENA_SIZE :: 4 * mem.Megabyte
 
 Loaded_Module :: struct {
 	original_path: string,
 	lib:           platform.Library,
 	api:           ^core.Module_API,
+	arena:         mem.Arena,
 }
 
 unload_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) {
 	if m.api != nil {
-		m.api.shutdown(ctx)
+		if m.api.shutdown != nil {
+			m.api.shutdown(ctx)
+		}
 		m.api = nil
 	}
 
 	platform.unload_library(&m.lib)
+
+	// Free arena backing memory. Must use the heap explicitly — same reason
+	// as the alloc: context.allocator points to this arena, not the heap.
+	delete(m.arena.data, runtime.default_allocator())
+	m.arena = {}
 }
 
 load_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
@@ -45,7 +58,17 @@ load_module :: proc(m: ^Loaded_Module, ctx: ^core.Engine_Context) -> bool {
 	m.lib = lib
 	m.api = api
 
-	if !m.api.init(ctx) {
+	// Create the module's persistent arena. Sized by the module's declared
+	// budget, falling back to the engine default.
+	// Must use the heap explicitly — context.allocator may already point to
+	// a dead arena from a previous load (e.g. during hot-reload).
+	budget := api.memory_budget if api.memory_budget > 0 else DEFAULT_MODULE_ARENA_SIZE
+	m.arena.data = make([]byte, budget, runtime.default_allocator())
+
+	// Set context.allocator to the arena so that init (and all callees) use it.
+	context.allocator = mem.arena_allocator(&m.arena)
+
+	if m.api.init != nil && !m.api.init(ctx) {
 		unload_module(m, ctx)
 		core.engine_error(ctx, "engine", "module init failed")
 		return false
