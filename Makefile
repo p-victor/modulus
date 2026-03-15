@@ -35,6 +35,25 @@ safe-linux:
 safe-windows:
 	bash scripts/build.sh windows safe
 
+build-test-modules:
+	MODULE=mod_a bash scripts/build.sh native debug module
+	MODULE=mod_b bash scripts/build.sh native debug module
+	MODULE=mod_c bash scripts/build.sh native debug module
+	MODULE=mod_d bash scripts/build.sh native debug module
+	MODULE=mod_e bash scripts/build.sh native debug module
+
+# Diamond graph: a→(b,c), b→d, c→e
+# Passed in scrambled order to verify topo sort.
+# Valid init orders: d/e before b/c, b/c before a.
+# Valid shutdown orders: reverse of init.
+test-manifest: build build-test-modules
+	./build/linux_amd64/bin/modulus \
+		build/linux_amd64/modules/mod_a.so \
+		build/linux_amd64/modules/mod_c.so \
+		build/linux_amd64/modules/mod_d.so \
+		build/linux_amd64/modules/mod_b.so \
+		build/linux_amd64/modules/mod_e.so
+
 rebuild: clean build
 
 run:

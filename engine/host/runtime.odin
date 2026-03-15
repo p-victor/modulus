@@ -1,5 +1,6 @@
 package host
 
+import "base:runtime"
 import "core:fmt"
 import "core:mem"
 import "core:os"
@@ -68,11 +69,17 @@ _run_cold :: proc() {
 	module_paths, ok := _resolve_module_paths()
 	if !ok do return
 
-	module_count := min(len(module_paths), MAX_MODULES)
+	// TEMP(metaprogram): load order determined at runtime from manifests.
+	// Metaprogram pre-computes this and generates a statically ordered slot array.
+	ordered_paths, sort_ok := resolve_load_order(module_paths, &ctx)
+	if !sort_ok do return
+	defer delete(ordered_paths, runtime.default_allocator())
+
+	module_count := min(len(ordered_paths), MAX_MODULES)
 
 	slots: [MAX_MODULES]Loaded_Module
 	for i in 0..<module_count {
-		slots[i].original_path = module_paths[i]
+		slots[i].original_path = ordered_paths[i]
 	}
 
 	core.engine_log(&ctx, .Info, "engine", "starting modulus")
@@ -89,12 +96,19 @@ _run_cold :: proc() {
 		loaded_count += 1
 	}
 
-	context.allocator = mem.arena_allocator(&slots[0].arena)
+	// TEMP(design): primary should be declared in manifest ("primary": true).
+	// See: modulus/roadmap/Phase 2 - Module Manifest and Registry.md
+	primary := 0
+	for i in 0..<loaded_count {
+		if slots[i].api.run != nil { primary = i; break }
+	}
+
+	context.allocator = mem.arena_allocator(&slots[primary].arena)
 
 	_setup_signals()
 
-	if slots[0].api.run != nil {
-		slots[0].api.run(&ctx)
+	if slots[primary].api.run != nil {
+		slots[primary].api.run(&ctx)
 	}
 
 	core.engine_log(&ctx, .Info, "engine", "shutting down")

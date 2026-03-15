@@ -105,6 +105,15 @@ if [[ "$STEP" != "engine" ]]; then
         -target:$ODIN_TARGET \
         -out:"$MODULE_PATH" \
         $ODIN_FLAGS
+
+    # TEMP(metaprogram): copy manifest file to build dir so engine can read it at runtime.
+    # Metaprogram generates manifests at build time — no runtime file I/O needed.
+    MANIFEST_SRC="modules/${MODULE}/${MODULE}.json"
+    MANIFEST_DST="${MODULE_PATH%.*}.json"
+    if [[ -f "$MANIFEST_SRC" ]]; then
+        cp "$MANIFEST_SRC" "$MANIFEST_DST"
+        echo "    manifest: $MANIFEST_DST"
+    fi
 fi
 
 if [[ "$STEP" != "module" ]]; then

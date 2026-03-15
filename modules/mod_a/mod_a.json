@@ -1,0 +1,6 @@
+{
+  "name": "mod_a",
+  "version": 1,
+  "depends_on": ["mod_b", "mod_c"],
+  "provides": []
+}
